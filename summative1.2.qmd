@@ -1,0 +1,485 @@
+---
+title: "summative1_part2"
+format: html
+editor: visual
+---
+
+## Summative 1: Part 2
+
+Your brief is to answer the following question: "Is it feasible to identify AI-averse individuals, without directly asking about their attitudes to this technology?"
+
+Your answer should be a report of around 500-700 words that a) describes your approach to designing the model, b) demonstrates your final trained model's performance, and c) answers the brief providing a clear justification. You should think carefully about how you structure this report to present your findings in a clear manner. You may use (well-formatted) charts to help illustrate your claims. This report should be submitted as a .html file.
+
+
+- Data Cleaning and Preprocessing: taking care of NA values
+- Feature Selection and Engineering
+- Normalisation and Scaling
+- Exploratory Data Analysis: graphs/visuals/ correlations
+- k mean clustering? Different categories of people
+- Decision Trees: CART
+- Evaluation
+
+
+
+```{r}
+library(haven)
+# Load the data set
+oxis_data <- haven::read_dta("UKDA-9146-stata/stata/stata14/oxis2019ukda.dta")
+```
+
+
+# Defining variables in each group
+```{r}
+common_vars <- c("age", "gender", "eth4", "marstat", 
+                 "impinftv", "impinfrad", "impinfine", "impinfnews", "impenttv", 
+                 "impentrad", "impentppl", "impentine", "relpnews", "reltv", "relrad", 
+                 "relonews", "relsclm", "relsrch", "trmost", "funlit", "intnet", 
+                 "agttry", "agtbet", "aganon", "agcred", "agpriv", "agtdate", "agpdata", 
+                 "agai", "actsport", "actloc", "actunion", "actenv", "actpol", "actchar", 
+                 "actrel", "p_direc", "p_pwill", "p_peop", "p_prun", "p_ptalk", "p_psell", 
+                 "agtwout", "agtfail", "agtbre", "agtfun", "aglerdis", "aglerwant", "agoff", 
+                 "aglereasy", "mob", "mobs", "mobmail2", "mobppix2", "mobspix2", "moblmus2", 
+                 "mobdir2", "mobsns2", "mobtpix2", "mobtrav2", "mobform2", "mobttime", 
+                 "mobvid", "mobstime", "mobfrust", "mobavoid", "mobwast", "mobptime", 
+                 "mobeasy", "moblone", "mobesc", "mobtouch", "mobnews", "mobgamep", 
+                 "moborg", "hhcabsat", "hhtab", "hhgame", "hhtv", "hhwear", "hhstrem", 
+                 "hhpva", "ncomp", "usecomp", "usenet", 
+                 "ageasy", "agfrust", "agimmor", "agaddict", "agexh", 
+                 "agintouch", "agmeet", "agstime", "agpers", "agremv", "agwtime", "agptime", 
+                 "aglonely", "agttime", "agenjoy", "agescape", "agpolite", "agvulg", 
+                 "p_int", "p_party", "p_conmp", "p_pet", "p_buypol", "p_opinf", "p_cmt", 
+                 "p_censor", "p_caresay", "p_hideinf", "p_freesay", "p_efqual", "p_efund", 
+                 "p_efeasy", "p_efgood", "p_power", "p_moresay", "p_kwgov", "p_pubkw", 
+                 "p_clim", "p_immig", 
+                 "dgorig", "edntt", "labfor", "workstudy", "studywork", "workhome", 
+                 "workuse", "workperf", "wad", "wcoll", "wdoc", "wmat", "wdobet", "wgetbet", 
+                 "yrborn", "marstat", "adulthh", "kidhh", "disab", "disabnet", 
+                 "urbrur", "income", "lackcomp", "leftout", "isolate", "agshy", "agoutgo", 
+                 "agnocon", "agsucc", "agown", "agright", "agnoler", "agopp", "agideal", 
+                 "agcare", "agdislife", "aginjus", "agwthink", "agwpay", "frgamb", "frsex")
+
+
+## Internet Users
+current_users_vars <- c("u_acchome", "u_accmob", "u_accsuw", "u_acclib", "u_accfre", 
+                         "usedfir", "u_ability", "hhfast", "cs_bank", "cs_form", "cs_vid", 
+                         "cs_pjt", "cs_heal", "u_snsfb", "u_snsli", "u_snstw", "u_snsdat", 
+                         "u_snspin", "u_snsgoo", "u_snsins", "u_snssna", "u_snsvid", 
+                         "u_snsoth", "u_frstat", "u_frspix", "u_frscmt", "u_frrwri", 
+                         "u_frnfo", "u_frcont", "u_frpcmt", "u_frsper3", "u_frswri3", 
+                         "u_frpriv3", "u_frpol3", "u_frscl3", "u_frslikecom3", "u_frdrop3", 
+                         "u_frups3", "u_frrpcmt3", "u_agwast", "u_agptime", "bl_offy", 
+                         "bl_arg", "u_heasy", "u_gofir", "u_hfam", "u_hsuw", "u_hlib", 
+                         "u_hvorg", "u_htrain", "u_hvid", "u_hother", "u_frattach", 
+                         "u_frim", "u_frsns", "u_frcalls", "u_frrblog", "u_frwblog", 
+                         "u_frsite", "u_frcompl", "u_frfloc", "u_frpprob", "u_time", 
+                         "u_frppix", "u_frrpix", "u_frwri", "u_frpvid", "u_frrvid", 
+                         "u_cmtpr2", "u_cmtser2", "u_cmtusr2", "s_freq", "s_wheng", 
+                         "s_mpt", "s_cg", "s_wro", "s_lern", "s_over", "s_nthk", "s_chek", 
+                         "pn_fam", "pn_pol", "pn_tv", "pn_rad", "pn_fnews", "pn_onews", 
+                         "pn_sns", "pn_srch", "pn_disa", "pn_dif", "pn_conf", "pn_med", 
+                         "u_frogame", "u_frngame", "u_frdlmus", "u_frlmus", "u_frdlvid", 
+                         "u_frwmov", "u_frlpix", "u_frwtv", "u_frpod", "u_frbook", 
+                         "u_comaddr", "u_comdob", "u_compho", "u_comcred", "u_compix", 
+                         "u_fund", "u_frnews", "u_frevent", "u_frsport", "u_frtrav", 
+                         "u_frgoog", "u_frpopnews", "u_ijob", "u_smon", "u_fevent", 
+                         "u_fheal", "u_bmed", "u_metper", "u_pubann", "u_fjob", "u_conrely", 
+                         "u_convirus", "u_conpix", "u_conmus", "u_padd2", 
+                         "u_pshop2", "u_pmed2", "u_pmar2", "u_page2", "u_pprot2","u_hnone", "u_confren",
+                         "u_frfact", "u_frproj", "u_frint", "u_frdiy", "u_lertran", 
+                         "u_lertfree", "u_lertbuy", "u_lertobuy", "u_lerloc", 
+                         "u_lerliv", "u_leroff", "u_leronl", "u_lernneed", "u_lerncost", 
+                         "u_lerntime", "u_lernwher", "u_lernwant", "u_lernwhat", "u_lernint", 
+                         "u_lerprod", "u_lersskil", "u_lercmm", "u_frbuy", "u_frbills", 
+                         "u_frbank", "u_frcomp", "u_frfood", "u_frsell", "locserv", 
+                         "loctax", "govserv", "govtax", "sch", "mp", "policy", "govweb", 
+                         "u_conad", "u_convir", "u_concom", "u_conpay", "u_actad", 
+                         "u_actvirus", "u_actcom", "u_spam", "u_virus", "u_misrep", 
+                         "u_stolen", "u_hate", "u_theft", "u_hack", "u_actpay", "u_actspw", 
+                         "u_actcpw", "u_actsec", "frsport", "frtv", "frread", "frgoout", 
+                         "frcards", "frclass")
+
+
+
+## Never Used Internet
+never_used_vars <- c("n_reint", "n_reacc", "n_recomp", "n_redif", "n_reuseful", "n_reexpen", 
+                     "n_repriv", "n_rebad", "n_renotime", "n_renoint", "n_reusenet", 
+                     "n_retime", "n_reage", "n_relikeme", "n_remoney", "n_redetail", "n_reimp",
+                     "n_agmiss", "n_hpar", "n_hfrien", "n_hpart", "n_hkid", "n_hsib", "n_hlib", 
+                     "n_hcmy", "n_hcoll", "n_hpay", "n_agleftout", "n_agbetnot", "n_agfuture", 
+                     "n_agperbet", "n_hsome", "n_par", "n_frien", "n_part", "n_kid", "n_sib", 
+                     "n_lib", "n_cmy", "n_coll", "n_pay", "n_future", "n_gsave", "n_gfam", 
+                     "n_gint", "n_gtv", "n_gbank", "n_gben", "n_gjob", "ynacc")
+
+## Ex-Users
+ex_user_vars <- c("e_retry", "e_rework", "e_resch", "e_rerec", "e_reacc", "e_rehkid", "e_reintouch",
+                  "e_buysvc", "e_reimpu", "e_reint", "e_remove", "e_recomp", "e_redif", "e_reuseful", 
+                  "e_reexpen", "e_repriv", "e_rebad", "e_renotime", "e_renoint", "e_rehow", 
+                  "e_retime", "e_reage", "e_relikeme", "e_rejob", "e_reimps", "e_renotuse")
+
+
+```
+
+
+#Filtering Data to create Groups
+```{r}
+never_used <- oxis_data %>% 
+  select(all_of(c(common_vars, never_used_vars)))
+
+ex_users <- oxis_data %>% 
+  select(all_of(c(common_vars, ex_user_vars)))
+
+current_users <- oxis_data %>% 
+  select(all_of(c(common_vars, current_users_vars)))
+
+```
+
+
+#Current Users: Fitting CART model
+
+```{r}
+# Load necessary libraries
+library(haven)       # Reading STATA files
+library(dplyr)       # Data manipulation
+library(rpart)       # CART model
+library(rpart.plot)  # Decision tree visualization
+library(caret)     # Model evaluation
+library(ROSE)        # Class balancing if needed
+library(performanceEstimation)       # SMOTE for class balancing
+
+# 🌟 Train & Prune Decision Tree for Internet Users with Cross-Validation
+
+# Step 1: Prepare Data
+current_users <- oxis_data %>%
+  select(all_of(c(common_vars, current_users_vars))) %>%  
+  drop_na(agai) %>%                                       
+  filter(agai %in% c(1, 2, 4, 5)) %>%                    
+  mutate(
+    agai = factor(ifelse(agai %in% c(1, 2), 1, 0), levels = c(0, 1))
+  ) %>%
+  mutate(agai = relevel(agai, ref = "1"))  # Set AI-Averse (1) as positive class
+
+
+# Train-Test Split (80% Training, 20% Testing)
+train_indices <- sample(1:nrow(current_users), size = 0.8 * nrow(current_users))
+train_data <- current_users[train_indices, ]
+test_data  <- current_users[-train_indices, ]
+
+# Step 3: Define Cost Matrix (Higher penalty for misclassifying AI-Averse (1))
+loss_matrix <- matrix(c(0, 10,  # Cost of correctly classifying AI-Pro (0) = 0, Misclassifying AI-Averse (1) = 5
+                        1, 0), # Cost of Misclassifying AI-Pro (0) = 1, Correctly classifying AI-Averse (1) = 0
+                      byrow = TRUE, nrow = 2)
+
+
+cart_model <- rpart(agai ~ . , 
+                         data = train_data, 
+                         method = "class", 
+                         parms = list(loss= loss_matrix, split="information"), # Apply cost matrix
+                         cp = 0.001, 
+                         minsplit = 10, 
+                         minbucket =3)
+
+# Check Complexity Parameter (cp) Table
+printcp(cart_model)
+
+# Step 5: Prune the Tree
+best_cp <- cart_model$cptable[which.min(cart_model$cptable[, "xerror"]), "CP"] * 0.5
+pruned_cart <- prune(cart_model, cp = best_cp)
+
+# Step 6: Visualize the Pruned Tree
+rpart.plot(pruned_cart, type = 3, extra = 101, tweak = 1.2)
+
+# Step 7: Model Evaluation on Test Data
+y_pred <- predict(pruned_cart, newdata = test_data, type = "class")
+conf_matrix <- confusionMatrix(y_pred, test_data$agai, positive = "1")
+
+# Print Model Performance Metrics
+print(conf_matrix)
+
+library(caret)
+var_imp <- varImp(cart_model)
+print(var_imp)
+
+# Separate AI-averse and AI-positive cases
+ai_averse <- train_data %>% filter(agai == 1)
+ai_positive <- train_data %>% filter(agai == 0)
+
+# Oversample AI-averse cases by duplicating them
+ai_averse_oversampled <- ai_averse[sample(1:nrow(ai_averse), size = nrow(ai_averse) * 2, replace = TRUE), ]
+
+# Combine back into a new balanced training dataset
+train_data_balanced <- bind_rows(ai_averse_oversampled, ai_positive)
+
+# Check class distribution after oversampling
+table(train_data_balanced$agai)
+
+# Train Decision Tree on Balanced Data
+cart_model_balanced <- rpart(agai ~ ., 
+                             data = train_data_balanced, 
+                             method = "class", 
+                             cp = 0.001, 
+                             minsplit = 10, 
+                             minbucket = 3)
+
+# Evaluate Model on Test Data
+y_pred_balanced <- predict(cart_model_balanced, newdata = test_data, type = "class")
+conf_matrix_balanced <- confusionMatrix(y_pred_balanced, test_data$agai, positive = "1")
+
+# Print Performance Metrics
+print(conf_matrix_balanced)
+
+
+
+
+```
+
+
+```{r}
+cluster_data <- current_users %>%
+  select(age, intnet, agshy, agtbet, agpriv, agwthink, moborg, cs_bank) %>%
+  na.omit()
+
+
+library(factoextra)
+
+fviz_nbclust(cluster_data, kmeans, method = "wss")  # Elbow method
+
+
+set.seed(42)
+kmeans_result <- kmeans(cluster_data, centers = 3, nstart = 25)
+
+# Add cluster labels to data
+cluster_data$cluster <- factor(kmeans_result$cluster)
+
+# Visualize Clusters (2D Projection)
+ggplot(cluster_data, aes(x = age, y = agtbet, color = cluster)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "K-Means Clustering of AI-Averse Groups",
+       x = "Age", y = "Belief AI Will Benefit Society") +
+  theme_minimal()
+
+```
+
+
+
+
+
+
+```{r}
+
+#Tree for internet users
+
+# Load necessary libraries
+library(haven)       # For reading STATA files
+library(dplyr)       # For data manipulation
+library(rpart)       # CART model
+library(rpart.plot)  # For visualizing the tree
+library(caret)       # For model evaluation
+
+# 🌟 Train CART Model for Internet Users
+cart_model_current <- oxis_data %>%
+  select(all_of(c(common_vars, current_users_vars))) %>%   # Select relevant variables
+  drop_na(agai) %>%                                       # Remove NAs in target variable
+  filter(agai %in% c(1, 2, 4, 5)) %>%                     # Remove "Don't Know" (-3) & Neutral (3)
+  mutate(
+    agai = factor(ifelse(agai %in% c(1, 2), 1, 0),        # Convert agai to binary: 1 = AI-Averse, 0 = AI-Pro
+                  levels = c(0, 1))                       # Ensure correct factor levels
+  ) %>%
+  mutate(agai = relevel(agai, ref = "1")) %>%             # Set AI-Averse (1) as the positive class
+  rpart(agai ~ ., data = ., method = "class")             # Train the CART model
+
+# 🌟 Plot the Decision Tree
+rpart.plot(cart_model_current, type = 3, extra = 101, tweak = 1.2)
+
+# 🌟 Model Evaluation - Confusion Matrix
+y_pred_current <- predict(cart_model_current, newdata = oxis_data, type = "class")
+conf_matrix_current <- confusionMatrix(y_pred_current, factor(oxis_data$agai, levels = c(0, 1)), positive = "1")
+
+# Print Results
+print(conf_matrix_current)
+printcp(cart_model_current)  # Check tree complexity
+summary(cart_model_current)   # Print tree summary
+
+```
+
+
+
+#Ex Users: Tree-Based Model
+
+```{r}
+
+#Ex Users
+
+# Load necessary libraries
+library(haven)       # For reading STATA files
+library(dplyr)       # For data manipulation
+library(rpart)       # CART model
+library(rpart.plot)  # For visualizing the tree
+library(caret)       # For model evaluation
+library(tidyverse)
+
+
+
+# Step 1: Prepare Data
+ex_users <- oxis_data %>%
+  select(all_of(c(common_vars, ex_user_vars))) %>%  
+  drop_na(agai) %>%                                       
+  filter(agai %in% c(1, 2, 4, 5)) %>%                    
+  mutate(
+    agai = factor(ifelse(agai %in% c(1, 2), 1, 0), levels = c(0, 1))
+  ) %>%
+  mutate(agai = relevel(agai, ref = "1"))  # Set AI-Averse (1) as positive class
+
+
+
+# Train-Test Split (80% Training, 20% Testing)
+train_indices <- sample(1:nrow(ex_users), size = 0.8 * nrow(ex_users))
+train_data <- ex_users[train_indices, ]
+test_data  <- ex_users[-train_indices, ]
+
+# Step 3: Define Cost Matrix (Higher penalty for misclassifying AI-Averse (1))
+loss_matrix <- matrix(c(0, 5,  # Cost of correctly classifying AI-Pro (0) = 0, Misclassifying AI-Averse (1) = 5
+                        1, 0), # Cost of Misclassifying AI-Pro (0) = 1, Correctly classifying AI-Averse (1) = 0
+                      byrow = TRUE, nrow = 2)
+
+
+cart_model <- rpart(agai ~ . , 
+                         data = train_data, 
+                         method = "class", 
+                         parms = list(split="information"), # Apply cost matrix
+                         cp = 0.001, 
+                         minsplit = 10, 
+                         minbucket =3)
+
+# Check Complexity Parameter (cp) Table
+printcp(cart_model)
+
+# Step 5: Prune the Tree
+best_cp <- cart_model$cptable[which.min(cart_model$cptable[, "xerror"]), "CP"] * 0.5
+pruned_cart <- prune(cart_model, cp = best_cp)
+
+# Step 6: Visualize the Pruned Tree
+rpart.plot(pruned_cart, type = 3, extra = 101, tweak = 1.2)
+
+# Step 7: Model Evaluation on Test Data
+y_pred <- predict(pruned_cart, newdata = test_data, type = "class")
+conf_matrix <- confusionMatrix(y_pred, test_data$agai, positive = "1")
+
+# Print Model Performance Metrics
+print(conf_matrix)
+
+
+```
+
+# Non Users: Tree-Based Model
+
+```{r}
+#Non Users
+
+# Step 1: Prepare Data
+non_users <- oxis_data %>%
+  select(all_of(c(common_vars, never_used_vars))) %>%  
+  drop_na(agai) %>%                                       
+  filter(agai %in% c(1, 2, 4, 5)) %>%                    
+  mutate(
+    agai = factor(ifelse(agai %in% c(1, 2), 1, 0), levels = c(0, 1))
+  ) %>%
+  mutate(agai = relevel(agai, ref = "1"))  # Set AI-Averse (1) as positive class
+
+
+
+# Train-Test Split (80% Training, 20% Testing)
+train_indices <- sample(1:nrow(non_users), size = 0.8 * nrow(non_users))
+train_data <- non_users[train_indices, ]
+test_data  <- non_users[-train_indices, ]
+
+# Step 3: Define Cost Matrix (Higher penalty for misclassifying AI-Averse (1))
+loss_matrix <- matrix(c(0, 5,  # Cost of correctly classifying AI-Pro (0) = 0, Misclassifying AI-Averse (1) = 5
+                        1, 0), # Cost of Misclassifying AI-Pro (0) = 1, Correctly classifying AI-Averse (1) = 0
+                      byrow = TRUE, nrow = 2)
+
+
+cart_model <- rpart(agai ~ ., 
+                         data = train_data, 
+                         method = "class", 
+                         parms = list(split="information"), # Apply cost matrix
+                         cp = 0.001, 
+                         minsplit = 10, 
+                         minbucket =3)
+
+# Check Complexity Parameter (cp) Table
+printcp(cart_model)
+
+# Step 5: Prune the Tree
+best_cp <- cart_model$cptable[which.min(cart_model$cptable[, "xerror"]), "CP"] * 0.5
+pruned_cart <- prune(cart_model, cp = best_cp)
+
+# Step 6: Visualize the Pruned Tree
+rpart.plot(pruned_cart, type = 3, extra = 101, tweak = 1.2)
+
+# Step 7: Model Evaluation on Test Data
+y_pred <- predict(pruned_cart, newdata = test_data, type = "class")
+conf_matrix <- confusionMatrix(y_pred, test_data$agai, positive = "1")
+
+# Print Model Performance Metrics
+print(conf_matrix)
+
+```
+
+```{r}
+#Non Users
+
+# Step 1: Prepare Data
+non_users <- oxis_data %>%
+  select(all_of(c(common_vars, never_used_vars))) %>%  
+  drop_na(agai) %>%                                       
+  filter(agai %in% c(1, 2, 4, 5)) %>%                    
+  mutate(
+    agai = factor(ifelse(agai %in% c(1, 2), 1, 0), levels = c(0, 1))
+  ) %>%
+  mutate(agai = relevel(agai, ref = "1"))  # Set AI-Averse (1) as positive class
+
+
+
+# Train-Test Split (80% Training, 20% Testing)
+train_indices <- sample(1:nrow(non_users), size = 0.8 * nrow(non_users))
+train_data <- non_users[train_indices, ]
+test_data  <- non_users[-train_indices, ]
+
+# Step 3: Define Cost Matrix (Higher penalty for misclassifying AI-Averse (1))
+loss_matrix <- matrix(c(0, 5,  # Cost of correctly classifying AI-Pro (0) = 0, Misclassifying AI-Averse (1) = 5
+                        1, 0), # Cost of Misclassifying AI-Pro (0) = 1, Correctly classifying AI-Averse (1) = 0
+                      byrow = TRUE, nrow = 2)
+
+
+cart_model <- rpart(agai ~ ., 
+                         data = train_data, 
+                         method = "class",  # Apply cost matrix
+                         cp = 0.001, 
+                         minsplit = 10, 
+                         minbucket =3)
+
+# Check Complexity Parameter (cp) Table
+printcp(cart_model)
+
+# Step 5: Prune the Tree
+best_cp <- cart_model$cptable[which.min(cart_model$cptable[, "xerror"]), "CP"] * 0.5
+pruned_cart <- prune(cart_model, cp = best_cp)
+
+# Step 6: Visualize the Pruned Tree
+rpart.plot(pruned_cart, type = 3, extra = 101, tweak = 1.2)
+
+# Step 7: Model Evaluation on Test Data
+y_pred <- predict(pruned_cart, newdata = test_data, type = "class")
+conf_matrix <- confusionMatrix(y_pred, test_data$agai, positive = "1")
+
+# Print Model Performance Metrics
+print(conf_matrix)
+
+```
+
+
+
+
+
+
+

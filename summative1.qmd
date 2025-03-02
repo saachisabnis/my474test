@@ -1,0 +1,658 @@
+---
+title: "202146996"
+format: html
+editor: visual
+---
+
+# MY474 Summative 1
+
+# Exercise 1
+
+1. pre-processing: scaling features
+2. feature selection: using LASSO to remove unimportant terms
+3. manually implement k-fold to find best value of lambda - do cross validation to find minimum error
+4. training the model : training logistic regression
+5. manual cross-validation: evaluate the model using k-fold
+6. performance metrics (AUC, ROC, NLL, binary-cross entropy)
+7. print results
+
+```{r}
+
+n <- 100
+X <- as.data.frame(matrix(rnorm(n * 20), nrow = n, ncol = 20))
+colnames(X) <- paste0("X", 1:20)
+y <- rbinom(n, 1, 0.5)
+
+
+  X_scaled <- scale(X)
+  
+# 1. Generate interaction terms
+interaction_terms <- model.matrix(~(.)^2, data = as.data.frame(X_scaled))[, -1]  # Remove intercept
+
+# 2. Generate polynomial terms column-wise
+poly_order <- 7
+poly_terms_list <- lapply(1:ncol(X_scaled), function(i) {
+  poly(X_scaled[, i], poly_order, raw = TRUE)
+})
+
+# 3. Combine all polynomial features into a matrix
+poly_terms <- do.call(cbind, poly_terms_list)
+
+# 4. Combine interaction and polynomial terms
+X_expanded <- cbind(interaction_terms, poly_terms)
+
+# 5. Assign column names correctly
+colnames(X_expanded) <- c(colnames(interaction_terms), unlist(lapply(1:ncol(X_scaled), function(i) {
+  paste0("X", i, "_poly", 1:poly_order)
+})))
+
+  
+```
+
+
+```{r}
+#### Loss Function for a logistic model
+
+logistic_loss <- function(ytrue, yhat, coefficients, lambda) {
+  # Negative Log Likelihood (Log Loss)
+  nll <- -sum(ytrue * log(yhat) + (1 - ytrue) * log(1 - yhat))
+  
+  # L1 penalty (LASSO)
+  l1_penalty <- lambda * sum(abs(coefficients))
+  
+  return(nll + l1_penalty)
+}
+```
+
+
+```{r}
+
+#### LASSO Model using Stochastic Gradient Descent
+
+  
+train_lasso <- function(X, y, l_rate, epochs, lambda) {
+  # Initialize coefficients to zero
+  coefs <- rep(0, ncol(X))
+  
+  for (b in 1:epochs) {  # For each epoch
+    for (i in sample(1:nrow(X))) {  # Shuffle data order
+      row_vec <- as.numeric(X[i,])  # Convert row to numeric
+      
+      # Compute prediction using logistic function
+      yhat_i <- 1 / (1 + exp(-sum(row_vec * coefs)))
+      
+      # Compute gradient for logistic loss
+      grad <- (yhat_i - y[i]) * row_vec  
+      
+      # Apply LASSO (L1) penalty using sub-gradient
+      l1_penalty <- lambda * sign(coefs)
+      
+      # Update coefficients
+      coefs <- coefs - l_rate * (grad + l1_penalty)
+    }
+    
+    # Compute loss for monitoring
+    yhat <- apply(X, 1, function(row) 1 / (1 + exp(-sum(row * coefs))))
+    loss_epoch <- logistic_loss(y, yhat, coefs, lambda)
+    
+    # Print progress
+    message(paste0("Iteration ", b, "/", epochs, " | Loss = ", round(loss_epoch, 5)))
+  }
+  
+  return(coefs)
+}
+
+```
+
+
+
+```{r}
+cross_validate_lasso <- function(X, y, lambda_vals, K, l_rate, epochs) {
+  set.seed(89)  # For reproducibility
+  fold_id <- sample(rep(1:K, length.out = nrow(X)))  # Assign fold numbers randomly
+  lambda_loss <- c()  # Store losses for each λ
+  
+  for (lambda in lambda_vals) {
+    total_loss <- 0  # Track total loss across folds
+    
+    for (k in 1:K) {
+      # Split data into training and validation
+      train_X <- X[fold_id != k,]
+      val_X <- X[fold_id == k,]
+      train_y <- y[fold_id != k]
+      val_y <- y[fold_id == k]
+      
+      # Train LASSO model on training set
+      coefs <- train_lasso(train_X, train_y, l_rate, epochs, lambda)
+      
+      # Predict probabilities on validation set
+      yhat_val <- apply(val_X, 1, function(row) 1 / (1 + exp(-sum(row * coefs))))
+      
+      # Compute loss on validation set
+      val_loss <- logistic_loss(val_y, yhat_val, coefs, lambda)
+      total_loss <- total_loss + val_loss
+    }
+    
+    # Store mean validation loss for this λ
+    lambda_loss <- append(lambda_loss, total_loss / K)
+  }
+  
+  # Select λ with lowest loss
+  best_lambda <- lambda_vals[which.min(lambda_loss)]
+  return(best_lambda)
+}
+
+```
+
+
+
+
+
+```{r}
+final_lasso_model <- function(X, y, l_rate, epochs, K, lambda_vals) {
+  # Find best lambda via cross-validation
+  best_lambda <- cross_validate_lasso(X, y, lambda_vals, K, l_rate, epochs)
+  
+  # Train final LASSO model with best lambda
+  final_coefs <- train_lasso(X, y, l_rate, epochs, best_lambda)
+  
+  # Return final model coefficients
+  return(list(best_lambda = best_lambda, coefficients = final_coefs))
+}
+
+```
+
+
+
+```{r}
+# 1. Generate synthetic data
+set.seed(100)
+n <- 100
+X <- as.data.frame(matrix(rnorm(n * 20), nrow = n, ncol = 20))
+colnames(X) <- paste0("X", 1:20)
+y <- rbinom(n, 1, 0.5)  # Binary outcome
+
+# 2. Preprocessing: Standardizing X
+X_scaled <- scale(X)
+
+# 3. Generate interaction and polynomial terms
+interaction_terms <- model.matrix(~(.)^2, data = as.data.frame(X_scaled))[, -1]  # Two-way interactions
+
+# 4. Generate polynomial terms (column-wise)
+poly_order <- 7
+poly_terms_list <- lapply(1:ncol(X_scaled), function(i) poly(X_scaled[, i], poly_order, raw = TRUE))
+poly_terms <- do.call(cbind, poly_terms_list)  # Combine polynomial features
+
+# 5. Combine interaction and polynomial terms
+X_expanded <- cbind(interaction_terms, poly_terms)
+
+# 6. Assign meaningful column names
+colnames(X_expanded) <- c(
+  colnames(interaction_terms),
+  unlist(lapply(1:ncol(X_scaled), function(i) paste0("X", i, "_poly", 1:poly_order)))
+)
+
+# 7. Define hyperparameters
+lambda_vals <- seq(0, 1, by = 0.1)  # Range of λ values
+l_rate <- 0.001  # Learning rate
+epochs <- 50  # Number of SGD iterations
+K <- 5  # Number of cross-validation folds
+
+# 8. Train final LASSO model on expanded features
+lasso_result <- final_lasso_model(X_expanded, y, l_rate, epochs, K, lambda_vals)
+
+# 9. Print selected features and best lambda
+print(paste("Best Lambda:", lasso_result$best_lambda))
+print("Selected Features (Nonzero Coefficients):")
+print(colnames(X_expanded)[lasso_result$coefficients != 0])
+
+
+```
+
+
+
+
+#Using Ridge Loss
+
+```{r}
+find_rmod <- function(X, y) {
+  # Scale the features
+  X_scaled <- scale(X, center = TRUE, scale = TRUE) # Standardize predictors (mean = 0, sd = 1)
+  
+  NLL <- function(ytrue, yhat) {
+  return(-sum(log(
+    (yhat^ytrue)*((1-yhat)^(1-ytrue)) #Negative Log Likelihood
+  )))
+}  
+  
+  ridgeLoss <- function(ytrue, yhat, coefficients, lambda) {
+  nll <- NLL(ytrue, yhat) # Calculate the standard logistic regression loss
+  l2_penalty <- lambda*sum(coefficients^2) #squared coefficients sum(coeff^2) - sum2norm
+  return(nll + l2_penalty)
+}
+  
+  # Sigmoid function to calculate the prediction for a given row
+  predict_row <- function(row, coefficients) {
+    pred_terms <- row * coefficients  # Multiply row values by their respective coefficients
+    yhat <- sum(pred_terms)  # Sum the products to get the linear prediction
+    return(1 / (1 + exp(-yhat)))  # Apply sigmoid to convert to probabilities
+  }
+  
+  ###### Ridge regression function using Stochastic Gradient Descent
+  train_ridge <- function(X, y, l_rate, epochs, lambda) {
+    coefs <- rep(0, ncol(X))  # Initialize coefficients to zero
+    
+    for (b in 1:epochs) {  # for each epoch
+      for (i in sample(1:nrow(X))) {  # Sampling the indices shuffles the order
+        row_vec <- as.numeric(X[i, ])  # Convert row to numeric for easier handling
+        
+        yhat_i <- predict_row(row_vec, coefficients = coefs)  # Get predictions
+        
+        # For each coefficient, apply the update using the gradient of the loss function
+        coefs <- sapply(1:length(coefs), function(k) {
+          grad <- (yhat_i - y[i]) * row_vec[k]  # Gradient for coefficient k
+          l2_penalty <- 2 * lambda * coefs[k]  # L2 penalty (ridge regularization)
+          
+          # Update coefficients
+          coefs[k] - l_rate * (grad + l2_penalty)
+        })
+      }
+      
+      # Calculate current error (loss) after coefficient updates
+      yhat <- apply(X, 1, predict_row, coefficients = coefs)  # Apply to all data
+      loss_epoch <- ridgeLoss(y, yhat, coefs, lambda)  # Compute ridge loss
+      
+      # Print loss for current epoch
+      message(paste0("Iteration ", b ,"/", epochs, " | Loss = ", round(loss_epoch, 5)))
+    }
+    
+    return(coefs)  # Return the final coefficients
+  }
+  
+  # Train the ridge regression model and get coefficients using the scaled data
+  coef_custom <- train_ridge(X = X_scaled, y = y, l_rate = 0.005, lambda = 0.1, epochs = 50)
+
+coef_glmnet <- coef(
+  glmnet(
+    X_scaled, y, 
+    family = "binomial", #if binary then put binary here
+    lambda = 0.2, # notice this is double (see above!) - because the glmnet function halves the value
+    alpha = 0) #alpha = 1 is lasso penalty, alpha = 0 is ridge penalty
+  )
+
+print(coef_custom)
+print(coef_glmnet)
+  
+  
+  ###### Cross-validation to find best lambda
+  lambda_vals <- seq(0, 2, by = 0.2)  # Lambda values to test
+  lambda_loss <- c()  # Store loss for each lambda
+  
+  K <- 10  # Number of folds in cross-validation
+  
+  for (lambda in lambda_vals) {
+    fold_id <- sample(rep(1:K, each = nrow(X) / K))  # Assign data to folds randomly
+    total_loss = 0  # Initialize total loss for this lambda
+    
+    for (k in 1:K) {
+      val_X <- X_scaled[fold_id == k, ]  # Validation set (using scaled data)
+      train_X <- X_scaled[fold_id != k, ]  # Training set (using scaled data)
+      
+      val_y <- y[fold_id == k]
+      train_y <- y[fold_id != k]
+      
+      
+      
+      # Fit ridge regression model using glmnet (with scaled data)
+      k_mod <- glmnet(train_X, train_y, family = "binomial", lambda = lambda, alpha = 0)
+      
+      # Predict on validation set
+      yhat_k <- predict(k_mod, newx = as.matrix(val_X), type = "response")
+      
+      # Calculate ridge loss for this fold
+      k_loss <- ridgeLoss(val_y, yhat_k, coef(k_mod)[-1], lambda)
+      
+      total_loss <- total_loss + k_loss
+    }
+    lambda_loss <- append(lambda_loss, total_loss / K)  # Store average loss for this lambda
+  }
+  
+optimal_lambda <- lambda_vals[which.min(lambda_loss)]
+  print(paste0("Optimal lambda: ", optimal_lambda))
+  
+  # Print loss for each lambda
+print(lambda_loss)
+  
+}
+```
+
+
+#Using Lasso Loss
+
+```{r}
+find_rmod <- function(X, y) {
+  
+  # Step 1: Scale the features
+  X_scaled <- scale(X, center = TRUE, scale = TRUE) # Standardize predictors (mean = 0, sd = 1)
+  
+  # Defining the Negative Log Likelihood
+  NLL <- function(ytrue, yhat) {
+  return(-sum(log(
+    (yhat^ytrue)*((1-yhat)^(1-ytrue)) 
+  )))
+}  
+  
+  #Defining the Lasso Loss Function
+  LassoLoss <- function(ytrue, yhat, coefficients, lambda) {
+  nll <- NLL(ytrue, yhat) # Calculate the standard logistic regression loss
+  l1_penalty <- lambda*sum(abs(coefficients)) #squared coefficients sum(coeff^2) - sum2norm
+  return(nll + l1_penalty)
+}
+  
+  # Sigmoid function to calculate the prediction for a given row
+  predict_row <- function(row, coefficients) {
+    pred_terms <- row * coefficients  # Multiply row values by their respective coefficients
+    yhat <- sum(pred_terms)  # Sum the products to get the linear prediction
+    return(1 / (1 + exp(-yhat)))  # Apply sigmoid to convert to probabilities
+  }
+  
+  ###### Lasso regression function using Stochastic Gradient Descent
+  train_lasso <- function(X, y, l_rate, epochs, lambda) {
+    coefs <- rep(0, ncol(X))  # Initialize coefficients to zero
+    
+    for (b in 1:epochs) {  # for each epoch
+      for (i in sample(1:nrow(X))) {  # Sampling the indices shuffles the order
+        row_vec <- as.numeric(X[i, ])  # Convert row to numeric for easier handling
+        
+        yhat_i <- predict_row(row_vec, coefficients = coefs)  # Get predictions
+        
+        # For each coefficient, apply the update using the gradient of the loss function
+        coefs <- sapply(1:length(coefs), function(k) {
+          grad <- (yhat_i - y[i]) * row_vec[k]  # Gradient for coefficient k
+          l1_penalty <-lambda * sign(coefs[k])  # L2 penalty (ridge regularization)
+          
+          # Update coefficients
+          coefs[k] - l_rate * (grad + l1_penalty)
+        })
+      }
+      
+      # Calculate current error (loss) after coefficient updates
+      yhat <- apply(X, 1, predict_row, coefficients = coefs)  # Apply to all data
+      loss_epoch <- LassoLoss(y, yhat, coefs, lambda)  # Compute ridge loss
+      
+      # Print loss for current epoch
+      message(paste0("Iteration ", b ,"/", epochs, " | Loss = ", round(loss_epoch, 5)))
+    }
+    
+    return(coefs)  # Return the final coefficients
+  }
+  
+  # Train the lasso regression model and get coefficients using the scaled data
+  coef_custom <- train_lasso(X = X_scaled, y = y, l_rate = 0.01, lambda = 0.05, epochs = 100)
+  
+    print(coef_custom[coef_custom != 0])
+
+coef_glmnet <- coef(
+  glmnet(
+    X_scaled, y, 
+    family = "binomial", #if binary then put binary here
+    lambda = 0.2, # notice this is double (see above!) - because the glmnet function halves the value
+    alpha = 1) #alpha = 1 is lasso penalty, alpha = 0 is ridge penalty
+  )
+
+print(coef_custom)
+print(coef_glmnet)
+  
+  
+  ###### Cross-validation to find best lambda
+
+  lambda_vals <- seq(0, 0.5, by = 0.05)  # Lambda values to test
+  lambda_loss <- c()  # Store loss for each lambda
+  
+  K <- 10  # Number of folds in cross-validation
+  
+  for (lambda in lambda_vals) {
+    fold_id <- sample(rep(1:K, each = nrow(X) / K))  # Assign data to folds randomly
+    total_loss = 0  # Initialize total loss for this lambda
+    
+    for (k in 1:K) {
+      val_X <- X_scaled[fold_id == k, ]  # Validation set (using scaled data)
+      train_X <- X_scaled[fold_id != k, ]  # Training set (using scaled data)
+      
+      val_y <- y[fold_id == k]
+      train_y <- y[fold_id != k]
+      
+      # Fit LASSO regression model using glmnet (with scaled data)
+     coef_lasso <- glmnet(train_X, train_y, family = "binomial", lambda = lambda, alpha = 1)
+      
+      # Predict on validation set
+      yhat_k <- predict(coef_lasso, newx = as.matrix(val_X), type = "response")
+      
+      # Calculate LASSO loss for this fold
+      k_loss <- LassoLoss(val_y, yhat_k, coef(coef_lasso)[-1], lambda)
+      
+      total_loss <- total_loss + k_loss
+    }
+    lambda_loss <- append(lambda_loss, total_loss / K)  # Store average loss for this lambda
+  }
+  
+  optimal_lambda <- lambda_vals[which.min(lambda_loss)]
+  print(paste0("Optimal lambda: ", optimal_lambda))
+  
+  # Print loss for each lambda
+  print(lambda_loss)
+  
+}
+```
+
+
+
+
+## Lasso Loss without glmnet
+
+```{r}
+find_rmod <- function(X, y) {  
+  # Step 1: Scale the features
+  X_scaled <- scale(X, center = TRUE, scale = TRUE) # Standardize predictors (mean = 0, sd = 1)
+  
+  # Negative Log Likelihood (Binary Cross-Entropy)
+  NLL <- function(ytrue, yhat) {
+    return(-sum(ytrue * log(yhat) + (1 - ytrue) * log(1 - yhat)))
+  }  
+
+  # Lasso Loss Function
+  LassoLoss <- function(ytrue, yhat, coefficients, lambda) {
+    nll <- NLL(ytrue, yhat)  # Standard logistic regression loss
+    l1_penalty <- lambda * sum(abs(coefficients))  # L1 regularization (Lasso)
+    return(nll + l1_penalty)
+  }
+
+  # Sigmoid function
+  predict_row <- function(row, coefficients, intercept) {
+  pred_terms <- sum(row * coefficients) + intercept
+  return(1 / (1 + exp(-pred_terms)))
+}
+
+
+  ###### Lasso regression function using Stochastic Gradient Descent
+  train_lasso <- function(X, y, l_rate, epochs, lambda) {
+    coefs <- rep(0, ncol(X))  # Initialize coefficients to zero
+    
+    for (b in 1:epochs) {  # Epochs loop
+      for (i in sample(1:nrow(X))) {  # Shuffle indices for SGD
+        row_vec <- as.numeric(X[i, ])  
+        
+        yhat_i <- predict_row(row_vec, coefficients = coefs)  # Get prediction
+        
+        # Gradient Update with L1 Regularization
+        coefs <- sapply(1:length(coefs), function(k) {
+          grad <- (yhat_i - y[i]) * row_vec[k]  # Gradient
+          updated_coef <- coefs[k] - l_rate * grad  # Gradient step
+          
+          # Apply soft-thresholding for L1 regularization
+          if (updated_coef > lambda) {
+            updated_coef <- updated_coef - lambda
+          } else if (updated_coef < -lambda) {
+            updated_coef <- updated_coef + lambda
+          } else {
+            updated_coef <- 0  # Soft-thresholding sets small values to 0
+          }
+          
+          return(updated_coef)
+        })
+      }
+      
+      # Compute loss after each epoch
+      yhat <- apply(X, 1, predict_row, coefficients = coefs)  
+      loss_epoch <- LassoLoss(y, yhat, coefs, lambda)
+      
+      # Print loss for current epoch
+      message(paste0("Iteration ", b ,"/", epochs, " | Loss = ", round(loss_epoch, 5)))
+    }
+    
+    return(coefs)  # Return optimized coefficients
+  }
+
+  # Train Lasso model using SGD
+  coef_custom <- train_lasso(X = X_scaled, y = y, l_rate = 0.01, lambda = 0.05, epochs = 100)
+  
+  print(coef_custom[coef_custom != 0])  # Print only non-zero coefficients
+  
+  ###### Manual Cross-Validation to Find Best Lambda
+  lambda_vals <- seq(0, 0.5, by = 0.05)  # Range of lambda values
+  lambda_loss <- c()  # Store loss for each lambda
+  
+  K <- 10  # Number of folds in cross-validation
+  
+  for (lambda in lambda_vals) {
+    fold_id <- sample(rep(1:K, length.out = nrow(X_scaled)))  # Assign folds randomly
+    total_loss <- 0  # Initialize total loss
+    
+    for (k in 1:K) {
+      val_X <- X_scaled[fold_id == k, ]  
+      train_X <- X_scaled[fold_id != k, ]  
+      
+      val_y <- y[fold_id == k]
+      train_y <- y[fold_id != k]
+      
+      # Train Lasso model using custom function
+      coef_lasso <- train_lasso(train_X, train_y, l_rate = 0.01, lambda = lambda, epochs = 100)
+      
+      # Predict on validation set
+      yhat_k <- apply(val_X, 1, predict_row, coefficients = coef_lasso)
+      
+      # Compute Lasso loss for this fold
+      k_loss <- LassoLoss(val_y, yhat_k, coef_lasso, lambda)
+      
+      total_loss <- total_loss + k_loss
+    }
+    
+    lambda_loss <- append(lambda_loss, total_loss / K)  # Store average loss
+  }
+  
+  optimal_lambda <- lambda_vals[which.min(lambda_loss)]
+  print(paste0("Optimal lambda: ", optimal_lambda))
+  
+  # Print loss for each lambda
+  print(lambda_loss)
+}
+
+```
+
+
+# BCE Loss
+
+```{r}
+find_rmod <- function(X, y) {
+  
+  # Step 1: Scale the features
+  X_scaled <- scale(X, center = TRUE, scale = TRUE) 
+  
+  # Binary Cross-Entropy Loss Function
+  BCE_loss <- function(y_true, y_pred) {
+    eps <- 1e-15  # Small value to prevent log(0)
+    y_pred <- pmax(pmin(y_pred, 1 - eps), eps) 
+    return(-mean(y_true * log(y_pred) + (1 - y_true) * log(1 - y_pred)))
+  }
+  
+  # Lasso Loss Function (for Training)
+  LassoLoss <- function(ytrue, yhat, coefficients, lambda) {
+    nll <- BCE_loss(ytrue, yhat)  # Now using BCE instead of NLL
+    l1_penalty <- lambda * sum(abs(coefficients))  
+    return(nll + l1_penalty)
+  }
+  
+  # Sigmoid Function for Predictions
+  predict_row <- function(row, coefficients) {
+    pred_terms <- row * coefficients  
+    yhat <- sum(pred_terms)  
+    yhat <- pmin(pmax(yhat, -100), 100)  # Prevent overflow
+    return(1 / (1 + exp(-yhat)))  
+  }
+  
+  ###### Lasso Regression with Stochastic Gradient Descent
+  train_lasso <- function(X, y, l_rate, epochs, lambda) {
+    coefs <- rep(0, ncol(X))  
+    
+    for (b in 1:epochs) {  
+      for (i in sample(1:nrow(X))) {  
+        row_vec <- as.numeric(X[i, ])  
+        
+        yhat_i <- predict_row(row_vec, coefficients = coefs)  
+        
+        # Gradient Descent Update for Each Coefficient
+        coefs[] <- sapply(1:length(coefs), function(k) {
+          grad <- (yhat_i - y[i]) * row_vec[k]  
+          l1_penalty <- lambda * sign(coefs[k])  
+          coefs[k] - l_rate * (grad + l1_penalty)
+        })
+      }
+
+      # Compute loss for each epoch
+      yhat <- apply(X, 1, predict_row, coefficients = coefs)  
+      loss_epoch <- LassoLoss(y, yhat, coefs, lambda)  
+      
+      # Print loss per epoch
+      message(paste0("Iteration ", b ,"/", epochs, " | Loss = ", round(loss_epoch, 5)))
+    }
+    
+    return(coefs)  
+  }
+  
+  # Train the LASSO Model
+  coef_custom <- train_lasso(X = X_scaled, y = y, l_rate = 0.01, lambda = 0.05, epochs = 100)
+
+  print("Final Non-Zero Coefficients:")
+  print(coef_custom[coef_custom != 0])
+  
+  # Predict final probabilities using the trained model
+  yhat_final <- apply(X_scaled, 1, predict_row, coefficients = coef_custom)
+  
+  # Compute Binary Cross-Entropy Loss for Model Evaluation
+  final_bce_loss <- BCE_loss(y, yhat_final)
+  
+  # Print the evaluation result
+  print(paste0("Final Binary Cross-Entropy Loss: ", round(final_bce_loss, 5)))
+}
+
+```
+
+
+
+
+
+### Fake dataset
+
+```{r}
+# Generate the simulated dataset
+set.seed(42)
+n <- 100
+X <- as.data.frame(matrix(rnorm(n * 20), nrow = n, ncol = 20))
+colnames(X) <- paste0("X", 1:20)
+y <- rbinom(n, 1, 0.5)
+
+# Run the function
+predicted_probs <- find_rmod(X, y)
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
